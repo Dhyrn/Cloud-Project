@@ -77,7 +77,7 @@ Legend for `Target`: where it lands in this repo (or `—` if discarded).
 | `infra/week9-sqs/main.tf` | **REUSE** | `infrastructure/terraform/modules/queue/main.tf` | Excelente: queue standard + DLQ com redrive_policy, long polling, visibility timeout 60s. Manter exatamente assim. |
 | `infra/week9-sqs/fifo.tf` | OPCIONAL | `infrastructure/terraform/modules/queue/fifo.tf` | Variante FIFO. Mantém se queres a opção; caso contrário descartar (nem todas as queues precisam ser FIFO). Decisão: **descartar** — simplifica defesa. |
 | `infra/week9-sqs/variables.tf` + `outputs.tf` | **REUSE** | `infrastructure/terraform/modules/queue/` | Bom design. Renomear `name_prefix` default de `cn-course` → `cncloud-${var.environment}`. |
-| `sqs-policy.json` | **ADAPT** | `infrastructure/terraform/modules/compute/iam.tf` | Convert a JSON policy num `aws_iam_policy_document` data resource. **CRÍTICO:** o Resource hardcoded aponta para `arn:aws:sqs:us-east-1:969831127354:cn-course-product-events` (conta do professor!) — substituir por reference dinâmica ao output do módulo queue. |
+| `sqs-policy.json` | **ADAPT** | `infrastructure/terraform/modules/compute/iam.tf` | Convert a JSON policy num `aws_iam_policy_document` data resource. **NOTA:** o Resource hardcoded `arn:aws:sqs:us-east-1:969831127354:cn-course-product-events` é da própria conta do utilizador (confirmado via `aws_caller_identity` no bootstrap, account_id = 969831127354), mas o nome da queue (`cn-course-product-events`) era ad-hoc — vamos substituir por reference dinâmica ao output do módulo queue (`cncloud-dev-product-events`). |
 
 ## Week 10 — Ansible
 

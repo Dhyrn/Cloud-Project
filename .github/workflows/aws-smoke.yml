@@ -1,0 +1,48 @@
+# Smoke test for the GitHub Actions ↔ AWS OIDC integration.
+#
+# Runs `aws sts get-caller-identity` after assuming the cncloud-gha-deployer
+# role via OIDC. If this succeeds, all later workflows (terraform, deploy, ...)
+# will be able to authenticate to AWS the same way.
+#
+# Trigger manually from the Actions tab (workflow_dispatch) — there is no
+# need to run on every push.
+
+name: aws-smoke
+
+on:
+  workflow_dispatch:
+
+# OIDC requires `id-token: write` at the workflow (or job) level.
+# `contents: read` is harmless and the GitHub-recommended default.
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  whoami:
+    name: Verify OIDC role assumption
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+          role-session-name: github-actions-smoke-${{ github.run_id }}
+
+      - name: Print AWS caller identity
+        run: aws sts get-caller-identity
+
+      - name: Verify access to Terraform state bucket
+        run: |
+          aws s3api head-bucket \
+            --bucket "cncloud-tf-state-$(aws sts get-caller-identity --query Account --output text)-us-east-1"
+          echo "S3 state bucket is reachable."
+
+      - name: Verify access to DynamoDB locks table
+        run: |
+          aws dynamodb describe-table \
+            --table-name cncloud-tf-locks \
+            --query 'Table.TableStatus' \
+            --output text

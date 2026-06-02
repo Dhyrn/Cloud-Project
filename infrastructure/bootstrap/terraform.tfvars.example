@@ -1,0 +1,36 @@
+###############################################################################
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is .gitignored — never commit real values.
+###############################################################################
+
+# AWS region all bootstrap resources live in.
+# IMPORTANT: billing metrics only exist in us-east-1, so keep this as us-east-1
+# unless you also rework billing.tf with a region-aliased provider.
+aws_region = "us-east-1"
+
+# Short project name; prefixes all bootstrap resources.
+# Must match what we set in docs/architecture.md.
+project_name = "cncloud"
+
+# Free-form team / owner tag value.
+owner = "dhiren"
+
+###############################################################################
+# Billing alarm
+###############################################################################
+
+billing_email                  = "dhiren.pradip@gmail.com"
+billing_warn_threshold_usd     = 5
+billing_critical_threshold_usd = 20
+
+###############################################################################
+# GitHub Actions OIDC
+#
+# These three values are case-sensitive and must match your GitHub repo
+# exactly. The branch filter accepts a literal branch name (e.g. "main")
+# or "*" for any branch (handy in dev, tighten to "main" before submission).
+###############################################################################
+
+github_org           = "Dhyrn"
+github_repo          = "Cloud-Project"
+github_branch_filter = "*"
