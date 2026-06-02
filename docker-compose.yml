@@ -1,50 +1,151 @@
-# Docker Compose Configuration
-# 
-# IMPORTANT: This file should be created by students in Week 2
-# 
-# TODO: Complete this docker-compose.yml file as part of Week 2 exercises
-# 
-# Requirements:
-# 1. Create Dockerfiles for each service (user-service, product-service, order-service, api-gateway)
-# 2. Configure services with appropriate ports, environment variables, and networks
-# 3. Set up Kafka and Zookeeper for event-driven communication
-# 4. Configure service dependencies (depends_on)
-# 5. Create a Docker network for service communication
-#
-# See Aulas/Week-02/ for detailed instructions
-
 version: '3.8'
-
-# TODO: Add your services here
 services:
-  # TODO: Add Zookeeper service (required for Kafka)
-  
-  # TODO: Add Kafka service
-  
-  # TODO: Add user-service
-  # Hint: Use build context ./user-service
-  #       Port: 8081
-  #       Environment: SPRING_PROFILES_ACTIVE=docker
-  
-  # TODO: Add product-service
-  # Hint: Use build context ./product-service
-  #       Port: 8082
-  #       Environment: SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-  
-  # TODO: Add order-service
-  # Hint: Use build context ./order-service
-  #       Port: 8083
-  #       Environment: 
-  #         - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-  #         - SERVICES_USER_URL=http://user-service:8081
-  #         - SERVICES_PRODUCT_URL=http://product-service:8082
-  
-  # TODO: Add api-gateway
-  # Hint: Use build context ./api-gateway
-  #       Port: 8080
-  #       Update GatewayConfig.java to use service names instead of localhost
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-# TODO: Create a Docker network
-# networks:
-#   microservices-network:
-#     driver: bridge
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "nc -z localhost 9092 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  user-service:
+    build:
+      context: ./user-service
+    container_name: user-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8081:8081"
+    depends_on:
+      - kafka
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  product-service:
+    build:
+      context: ./product-service
+    container_name: product-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      CLOUD_SQS_PRODUCT_EVENTS_ENABLED: "true"
+      CLOUD_SQS_PRODUCT_EVENTS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/969831127354/cn-course-product-events"
+      CLOUD_SQS_PRODUCT_EVENTS_REGION: us-east-1
+      JAVA_TOOL_OPTIONS: >-
+        -Dcloud.sqs.product-events.enabled=true
+        -Dcloud.sqs.product-events.queue-url=https://sqs.us-east-1.amazonaws.com/969831127354/cn-course-product-events
+        -Dcloud.sqs.product-events.region=us-east-1
+    ports:
+      - "8082:8082"
+    depends_on:
+      - kafka
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  order-service:
+    build:
+      context: ./order-service
+    container_name: order-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SERVICES_USER_URL: http://user-service:8081
+      SERVICES_PRODUCT_URL: http://product-service:8082
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      CLOUD_SQS_PRODUCT_EVENTS_CONSUMER_ENABLED: "true"
+      CLOUD_SQS_PRODUCT_EVENTS_CONSUMER_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/969831127354/cn-course-product-events"
+      CLOUD_SQS_PRODUCT_EVENTS_CONSUMER_REGION: us-east-1
+      JAVA_TOOL_OPTIONS: >-
+        -Dcloud.sqs.product-events-consumer.enabled=true
+        -Dcloud.sqs.product-events-consumer.queue-url=https://sqs.us-east-1.amazonaws.com/969831127354/cn-course-product-events
+        -Dcloud.sqs.product-events-consumer.region=us-east-1
+    ports:
+      - "8083:8083"
+    depends_on:
+      - kafka
+      - user-service
+      - product-service
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: api-gateway
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SERVICES_USER_URL: http://user-service:8081
+      SERVICES_PRODUCT_URL: http://product-service:8082
+      SERVICES_ORDER_URL: http://order-service:8083
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  microservices-network:
+    driver: bridge

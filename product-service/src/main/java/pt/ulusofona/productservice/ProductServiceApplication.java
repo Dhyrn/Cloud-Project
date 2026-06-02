@@ -2,7 +2,9 @@ package pt.ulusofona.productservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.kafka.annotation.EnableKafka;
+import pt.ulusofona.productservice.sqs.ProductSqsProperties;
 
 /**
  * Main application class for the Product Service microservice.
@@ -32,6 +34,7 @@ import org.springframework.kafka.annotation.EnableKafka;
  */
 @SpringBootApplication
 @EnableKafka
+@EnableConfigurationProperties(ProductSqsProperties.class)
 public class ProductServiceApplication {
 
     /**

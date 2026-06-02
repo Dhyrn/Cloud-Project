@@ -39,13 +39,34 @@ Thumbs.db
 
 # Terraform
 .terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+*.tfplan
+tfplan
+terraform.tfvars
+!terraform.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
-# Environment variables
+# Ansible
+*.retry
+ansible/inventory/*.local
+ansible/vault_password*
+
+# AWS / Secrets
+*.pem
+*.ppk
+.aws/
+aws-credentials*
+*credentials*.csv
 .env
 .env.local
+.env.*.local
 
 # Logs
 logs/

@@ -85,3 +85,14 @@ services:
   product:
     url: http://localhost:8082
 
+# Optional AWS SQS consumer for product-created events (same queue URL as product-service producer)
+cloud:
+  sqs:
+    product-events-consumer:
+      enabled: false
+      queue-url: ""
+      region: ""
+      poll-interval-ms: 5000
+      max-number-of-messages: 10
+      wait-time-seconds: 20
+

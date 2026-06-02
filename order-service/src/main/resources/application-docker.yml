@@ -1,0 +1,6 @@
+cloud:
+  sqs:
+    product-events-consumer:
+      enabled: true
+      queue-url: "https://sqs.us-east-1.amazonaws.com/969831127354/cn-course-product-events"
+      region: "us-east-1"

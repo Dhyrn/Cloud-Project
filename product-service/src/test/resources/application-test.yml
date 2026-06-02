@@ -14,3 +14,8 @@ spring:
   kafka:
     consumer:
       auto-startup: false
+
+cloud:
+  sqs:
+    product-events:
+      enabled: false

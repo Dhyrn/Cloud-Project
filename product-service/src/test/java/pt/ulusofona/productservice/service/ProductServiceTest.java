@@ -10,6 +10,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import pt.ulusofona.productservice.sqs.ProductEventSqsPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,6 +28,10 @@ class ProductServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<ProductEventSqsPublisher> productEventSqsPublisher;
 
     @InjectMocks
     private ProductService productService;

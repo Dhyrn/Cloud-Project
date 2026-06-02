@@ -30,3 +30,7 @@ services:
   product:
     url: http://localhost:8082
 
+cloud:
+  sqs:
+    product-events-consumer:
+      enabled: false

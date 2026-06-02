@@ -4,7 +4,10 @@ import pt.ulusofona.productservice.dto.ProductRequest;
 import pt.ulusofona.productservice.dto.ProductResponse;
 import pt.ulusofona.productservice.model.Product;
 import pt.ulusofona.productservice.repository.ProductRepository;
+import pt.ulusofona.productservice.sqs.ProductEventSqsPublisher;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +41,7 @@ import java.util.stream.Collectors;
  * @see ProductRequest
  * @see ProductResponse
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductService {
@@ -47,6 +51,11 @@ public class ProductService {
      * Injected via constructor using Lombok's @RequiredArgsConstructor.
      */
     private final ProductRepository productRepository;
+
+    /**
+     * Present only when {@code cloud.sqs.product-events.enabled=true} and the SQS client is configured.
+     */
+    private final ObjectProvider<ProductEventSqsPublisher> productEventSqsPublisher;
 
     /**
      * Retrieves all products from the database.
@@ -102,6 +111,15 @@ public class ProductService {
         product.setStockQuantity(request.getStockQuantity() != null ? request.getStockQuantity() : 0);
 
         Product savedProduct = productRepository.save(product);
+
+        productEventSqsPublisher.ifAvailable(publisher -> {
+            try {
+                publisher.publishProductCreated(savedProduct);
+            } catch (Exception ex) {
+                log.warn("SQS product-created publish failed: {}", ex.getMessage());
+            }
+        });
+
         return mapToResponse(savedProduct);
     }
 

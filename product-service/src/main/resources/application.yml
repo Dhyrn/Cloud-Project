@@ -67,3 +67,11 @@ logging:
     org.springframework.web: INFO
     org.springframework.kafka: INFO
 
+# Optional AWS SQS (Week 10 – students create queue + set URL; code ships in the template)
+cloud:
+  sqs:
+    product-events:
+      enabled: false
+      queue-url: ""
+      region: ""
+
