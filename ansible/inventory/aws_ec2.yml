@@ -1,0 +1,54 @@
+###############################################################################
+# Dynamic AWS EC2 inventory.
+#
+# Ansible queries the AWS API on every run and builds the inventory from
+# instance tags. No hardcoded IPs.
+#
+# Filter: Project=cncloud + Environment=dev + state=running.
+#
+# Why hostnames use tag:Name + compose ansible_host:
+#   amazon.aws >= 8 deprecated the dotted-string form for `hostnames`
+#   (e.g. `public-ip-address`). The robust pattern is to derive the display
+#   name from a tag and inject the real SSH target via `compose`.
+#
+# Requirements (run from repo root):
+#   pip install -r ansible/requirements.txt
+#   ansible-galaxy collection install -r ansible/requirements.yml
+#
+# Quick check (run from ansible/ dir):
+#   ansible-inventory --graph
+###############################################################################
+
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-1
+
+filters:
+  "tag:Project": cncloud
+  "tag:Environment": dev
+  instance-state-name: running
+
+# Display name = the EC2 Name tag (e.g. cncloud-dev-app-host).
+# This is just cosmetic — the actual SSH connection uses ansible_host below.
+hostnames:
+  - tag:Name
+
+# SSH target + handy per-host facts derived from EC2 metadata.
+compose:
+  ansible_host: public_ip_address
+  instance_id: instance_id
+  instance_name: ec2_tags.Name
+  ec2_private_ip: private_ip_address
+  ec2_public_dns: public_dns_name
+
+# Implicit groups, so playbooks can target e.g. `hosts: env_dev`
+# or `hosts: project_cncloud`.
+keyed_groups:
+  - key: ec2_tags.Environment
+    prefix: env
+  - key: ec2_tags.Project
+    prefix: project
+  - key: ec2_tags.Name
+    prefix: name
+    separator: '_'

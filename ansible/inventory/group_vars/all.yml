@@ -1,0 +1,19 @@
+---
+###############################################################################
+# Variables applied to ALL hosts discovered by the aws_ec2 inventory.
+#
+# Ansible auto-discovers this file because it sits in `group_vars/` ADJACENT
+# to the inventory file (inventory/aws_ec2.yml). If you move the inventory,
+# move this folder with it.
+###############################################################################
+
+# Amazon Linux 2 ships with ec2-user.
+ansible_user: ec2-user
+
+# SSH private key. Override with -e "ansible_ssh_private_key_file=/some/path"
+# or by exporting ANSIBLE_PRIVATE_KEY_FILE in your shell.
+ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY_FILE') | default('~/.ssh/week6-key.pem', true) }}"
+
+# Amazon Linux 2 has /usr/bin/python (Python 2.7) by default. Use python3
+# so modern Ansible modules behave predictably.
+ansible_python_interpreter: /usr/bin/python3

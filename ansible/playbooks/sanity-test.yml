@@ -1,0 +1,62 @@
+---
+###############################################################################
+# Playbook: sanity-test
+#
+# Proves the plumbing end-to-end before we put real application containers
+# on the host:
+#
+#   1. Ansible can reach the EC2 over SSH (via the aws_ec2 dynamic inventory).
+#   2. Docker is installed (we re-run the docker role to confirm idempotency).
+#   3. A trivial `hello-world` container can be pulled and run.
+#
+# Run from the ansible/ directory:
+#   ansible-playbook playbooks/sanity-test.yml
+#
+# Expected outcome:
+#   - All tasks PLAY RECAP shows ok=N, failed=0
+#   - Final debug task shows "Hello from Docker!" lines
+###############################################################################
+
+- name: Plumbing sanity test
+  hosts: env_dev
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Wait for SSH to be ready (EC2 may still be booting)
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: Show what host we are on
+      ansible.builtin.debug:
+        msg: >-
+          Connected to {{ inventory_hostname }}
+          (instance: {{ instance_name | default('?') }},
+          os: {{ ansible_distribution }} {{ ansible_distribution_version }})
+
+  roles:
+    - role: docker
+
+  tasks:
+    - name: Pull the hello-world image
+      ansible.builtin.command:
+        cmd: docker pull hello-world
+      register: docker_pull
+      changed_when: "'Downloaded newer image' in docker_pull.stdout"
+
+    - name: Run the hello-world container
+      ansible.builtin.command:
+        cmd: docker run --rm hello-world
+      register: hello_run
+      changed_when: false
+
+    - name: Show hello-world output
+      ansible.builtin.debug:
+        var: hello_run.stdout_lines
+
+    - name: Confirm we got the magic string
+      ansible.builtin.assert:
+        that:
+          - "'Hello from Docker!' in hello_run.stdout"
+        success_msg: "Plumbing OK — Docker round-trip succeeded on {{ inventory_hostname }}."
+        fail_msg: "Hello-world did not print the expected text."

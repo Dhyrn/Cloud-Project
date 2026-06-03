@@ -1,0 +1,4 @@
+---
+# Users to add to the docker group (passwordless docker access).
+docker_users:
+  - ec2-user

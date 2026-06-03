@@ -1,0 +1,32 @@
+###############################################################################
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+###############################################################################
+
+aws_region   = "us-east-1"
+project_name = "cncloud"
+environment  = "dev"
+owner        = "dhiren"
+
+# --- VPC ------------------------------------------------------------------ #
+# Defaults are sensible — only override if you need a different CIDR layout.
+
+# vpc_cidr             = "10.0.0.0/16"
+# public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+# private_subnet_cidrs = ["10.0.10.0/24", "10.0.20.0/24"]
+# availability_zones   = ["us-east-1a", "us-east-1b"]
+
+# --- Compute -------------------------------------------------------------- #
+
+# Existing key pair in this AWS account (reuse week6-key per docs/architecture.md).
+key_name = "week6-key"
+
+# Lock SSH down before submission — set this to your home IP in CIDR form,
+# e.g. ["83.45.123.10/32"].
+# ssh_allowed_cidrs = ["0.0.0.0/0"]
+
+# --- DB ------------------------------------------------------------------- #
+
+# db_engine_version  = "17.2"
+# db_instance_class  = "db.t3.micro"
+# db_database_name   = "appdb"
+# db_master_username = "appadmin"

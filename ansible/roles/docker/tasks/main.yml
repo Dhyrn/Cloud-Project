@@ -1,0 +1,37 @@
+---
+###############################################################################
+# Role: docker
+#
+# Ensure Docker is installed and running on Amazon Linux 2.
+# The EC2 user_data already installs Docker as part of bootstrap; this role
+# makes the same outcome IDEMPOTENT (safe to re-run, will report 'ok' if
+# already done) and provides a Plan B if the user_data fails.
+###############################################################################
+
+- name: Ensure Docker is installed (Amazon Linux 2 extras)
+  ansible.builtin.command:
+    cmd: amazon-linux-extras install -y docker
+    creates: /usr/bin/docker
+
+- name: Ensure Docker service is enabled and started
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add users to the docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+  notify: restart docker
+
+- name: Capture Docker version
+  ansible.builtin.command: docker --version
+  register: docker_version_out
+  changed_when: false
+
+- name: Show Docker version
+  ansible.builtin.debug:
+    msg: "Docker on {{ inventory_hostname }}: {{ docker_version_out.stdout }}"

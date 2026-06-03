@@ -1,0 +1,5 @@
+# Python dependencies for running ansible against AWS.
+# Install with: pip install -r ansible/requirements.txt
+ansible-core>=2.16,<2.18
+boto3>=1.34
+botocore>=1.34

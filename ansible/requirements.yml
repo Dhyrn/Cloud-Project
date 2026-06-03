@@ -1,0 +1,8 @@
+---
+# Ansible collections required by this project.
+# Install with: ansible-galaxy collection install -r ansible/requirements.yml
+collections:
+  - name: amazon.aws       # aws_ec2 dynamic inventory plugin
+    version: ">=7.0.0"
+  - name: community.docker # optional; we currently use raw `docker` commands
+    version: ">=3.4.0"
