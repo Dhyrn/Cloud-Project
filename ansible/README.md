@@ -22,7 +22,8 @@ ansible/
 │       ├── defaults/main.yml
 │       └── meta/main.yml
 └── playbooks/
-    └── sanity-test.yml         # task #7: end-to-end plumbing test
+    ├── sanity-test.yml         # task #7: end-to-end plumbing test
+    └── deploy-app.yml          # task #8: pull images + docker compose up
 ```
 
 ## First-time setup (do this once per machine)

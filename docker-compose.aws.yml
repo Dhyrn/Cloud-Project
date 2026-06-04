@@ -1,0 +1,127 @@
+###############################################################################
+# docker-compose.aws.yml — what runs on the EC2 host in AWS.
+#
+# Differences vs the local docker-compose.yml:
+#   - No Kafka/Zookeeper: the async path in AWS is SQS.
+#   - No AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY: the EC2 has an IAM
+#     instance profile (cncloud-dev-ec2-role) so the AWS SDK picks up
+#     temporary credentials from the metadata service.
+#   - Images are pulled from Docker Hub, not built from source.
+#     Tag is parameterised via ${IMAGE_TAG:-latest}.
+#   - SQS queue URL is injected by Ansible via the CNCLOUD_SQS_PRODUCT_EVENTS_URL
+#     environment variable (no hardcoded URL).
+#   - SPRING_PROFILES_ACTIVE=aws activates application-aws.yml in each service.
+###############################################################################
+
+services:
+  user-service:
+    image: ${DOCKER_HUB_USER:-dhirennn}/cncloud-user-service:${IMAGE_TAG:-latest}
+    container_name: user-service
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: aws
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -Xss256k"
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-appdb}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8081:8081"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  product-service:
+    image: ${DOCKER_HUB_USER:-dhirennn}/cncloud-product-service:${IMAGE_TAG:-latest}
+    container_name: product-service
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: aws
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -Xss256k"
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      CNCLOUD_SQS_PRODUCT_EVENTS_URL: ${CNCLOUD_SQS_PRODUCT_EVENTS_URL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-appdb}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8082:8082"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  order-service:
+    image: ${DOCKER_HUB_USER:-dhirennn}/cncloud-order-service:${IMAGE_TAG:-latest}
+    container_name: order-service
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: aws
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -Xss256k"
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      CNCLOUD_SQS_PRODUCT_EVENTS_URL: ${CNCLOUD_SQS_PRODUCT_EVENTS_URL}
+      SERVICES_USER_URL: http://user-service:8081
+      SERVICES_PRODUCT_URL: http://product-service:8082
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-appdb}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      user-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  api-gateway:
+    image: ${DOCKER_HUB_USER:-dhirennn}/cncloud-api-gateway:${IMAGE_TAG:-latest}
+    container_name: api-gateway
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: aws
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -Xss256k"
+      SERVICES_USER_URL: http://user-service:8081
+      SERVICES_PRODUCT_URL: http://product-service:8082
+      SERVICES_ORDER_URL: http://order-service:8083
+    depends_on:
+      user-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+networks:
+  microservices-network:
+    driver: bridge

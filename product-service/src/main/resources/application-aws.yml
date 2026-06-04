@@ -1,0 +1,53 @@
+###############################################################################
+# AWS profile for product-service.
+#
+# Differences vs the default profile:
+#   - No Kafka brokers configured (Kafka beans stay registered; listener will
+#     keep retrying in the background, harmless WARN logs). The async path in
+#     AWS is SQS, not Kafka.
+#   - SQS publisher ENABLED with URL + region injected by Ansible via env vars.
+#   - H2 in-memory is kept until task #9 (RDS migration).
+###############################################################################
+
+spring:
+  # ---- Persistence: RDS Postgres, schema 'product_svc' ------------------- #
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:appdb}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: product_svc
+        hbm2ddl:
+          create_namespaces: true   # auto-create the schema if missing
+        format_sql: false
+    show-sql: false
+
+  # ---- Kafka kept loaded but never tries to connect (no broker in AWS) -- #
+  kafka:
+    bootstrap-servers: kafka:9092
+    listener:
+      auto-startup: false
+      missing-topics-fatal: false
+
+cloud:
+  sqs:
+    product-events:
+      enabled: true
+      queue-url: ${CNCLOUD_SQS_PRODUCT_EVENTS_URL:}
+      region: ${AWS_REGION:us-east-1}
+
+logging:
+  level:
+    org.springframework.kafka: WARN
+    org.apache.kafka: WARN

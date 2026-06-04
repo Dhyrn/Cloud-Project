@@ -1,0 +1,14 @@
+###############################################################################
+# AWS profile for api-gateway.
+#
+# Upstream service URLs point to docker-compose service names. Override
+# via env vars set in docker-compose.aws.yml.
+###############################################################################
+
+services:
+  user:
+    url: ${SERVICES_USER_URL:http://user-service:8081}
+  product:
+    url: ${SERVICES_PRODUCT_URL:http://product-service:8082}
+  order:
+    url: ${SERVICES_ORDER_URL:http://order-service:8083}

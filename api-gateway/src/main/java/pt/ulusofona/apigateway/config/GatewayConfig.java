@@ -4,6 +4,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 /**
  * Configuration class for Spring Cloud Gateway routes.
@@ -32,6 +33,7 @@ import org.springframework.context.annotation.Configuration;
  * @see org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder
  */
 @Configuration
+@Profile("!aws") // When SPRING_PROFILES_ACTIVE=aws, routes come from application.yml (with env-var URIs).
 public class GatewayConfig {
 
     /**

@@ -17,3 +17,31 @@ ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_PRIVATE_KEY_FILE') | de
 # Amazon Linux 2 has /usr/bin/python (Python 2.7) by default. Use python3
 # so modern Ansible modules behave predictably.
 ansible_python_interpreter: /usr/bin/python3
+
+###############################################################################
+# Project-wide variables consumed by the deploy-app playbook.
+###############################################################################
+
+# AWS context — kept in sync with infrastructure/terraform/environments/dev.
+aws_account_id: "969831127354"
+aws_region: us-east-1
+
+# Project + environment match the Terraform tags. Used to build resource names.
+project_name: cncloud
+environment_name: dev
+
+# Resource names match the Terraform module outputs.
+sqs_product_events_name: "{{ project_name }}-{{ environment_name }}-product-events"
+sqs_product_events_url: "https://sqs.{{ aws_region }}.amazonaws.com/{{ aws_account_id }}/{{ sqs_product_events_name }}"
+
+# Docker Hub repo that hosts the four application images.
+docker_hub_user: dhirennn
+image_tag: latest
+
+# App layout on the host.
+app_dir: /opt/cncloud
+compose_file: "{{ app_dir }}/docker-compose.yml"
+
+# RDS — name of the Secrets Manager secret that holds the DB credentials.
+# (The Terraform db module creates this; the playbook reads it at deploy time.)
+db_secret_name: "{{ project_name }}-{{ environment_name }}-db-credentials"

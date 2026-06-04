@@ -1,0 +1,64 @@
+###############################################################################
+# AWS profile for order-service.
+#
+# Differences vs the default profile:
+#   - No Kafka brokers configured. Kafka beans stay registered; listener and
+#     producer will keep retrying connections in the background. The async
+#     path in AWS is SQS.
+#   - SQS consumer ENABLED for the same product-events queue.
+#   - Feign client URLs point to service names from docker-compose.aws.yml.
+#   - H2 in-memory is kept until task #9 (RDS migration).
+###############################################################################
+
+spring:
+  # ---- Persistence: RDS Postgres, schema 'order_svc' --------------------- #
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:appdb}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: order_svc
+        hbm2ddl:
+          create_namespaces: true
+        format_sql: false
+    show-sql: false
+
+  # ---- Kafka kept loaded but never tries to connect (no broker in AWS) -- #
+  kafka:
+    bootstrap-servers: kafka:9092
+    listener:
+      auto-startup: false
+      missing-topics-fatal: false
+
+# Feign clients — same network in docker-compose so service names work.
+services:
+  user:
+    url: ${SERVICES_USER_URL:http://user-service:8081}
+  product:
+    url: ${SERVICES_PRODUCT_URL:http://product-service:8082}
+
+cloud:
+  sqs:
+    product-events-consumer:
+      enabled: true
+      queue-url: ${CNCLOUD_SQS_PRODUCT_EVENTS_URL:}
+      region: ${AWS_REGION:us-east-1}
+      poll-interval-ms: 5000
+      max-number-of-messages: 10
+      wait-time-seconds: 20
+
+logging:
+  level:
+    org.springframework.kafka: WARN
+    org.apache.kafka: WARN
