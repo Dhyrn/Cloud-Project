@@ -191,6 +191,9 @@ jobs:
         env:
           ANSIBLE_PRIVATE_KEY_FILE: /home/runner/.ssh/week6-key.pem
           ANSIBLE_HOST_KEY_CHECKING: "False"
+          # The yaml stdout callback comes from a community collection we
+          # don't install on CI. Stick to the built-in `default` callback here.
+          ANSIBLE_STDOUT_CALLBACK: default
         run: |
           ansible-playbook playbooks/deploy-app.yml \
             -e "image_tag=${{ github.sha }}"
