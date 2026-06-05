@@ -60,8 +60,9 @@ variable "sqs_max_receive_count" {
 # --- Compute -------------------------------------------------------------- #
 
 variable "instance_type" {
-  type    = string
-  default = "t3.micro"
+  description = "EC2 instance type. t3.micro = 1vCPU/1GB (free tier, slow with 4 JVMs); t3.small = 2vCPU/2GB (~$0.02/h extra, recommended)."
+  type        = string
+  default     = "t3.small"
 }
 
 variable "key_name" {

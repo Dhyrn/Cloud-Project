@@ -20,6 +20,9 @@ owner        = "dhiren"
 # Existing key pair in this AWS account (reuse week6-key per docs/architecture.md).
 key_name = "week6-key"
 
+# Override only if you want to push back to free-tier t3.micro (slower boot but cheaper).
+# instance_type = "t3.micro"
+
 # Lock SSH down before submission — set this to your home IP in CIDR form,
 # e.g. ["83.45.123.10/32"].
 # ssh_allowed_cidrs = ["0.0.0.0/0"]
