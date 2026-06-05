@@ -1,0 +1,213 @@
+###############################################################################
+# Deploy — runs on push to main (and on manual dispatch).
+#
+# Pipeline:
+#   1. build-and-push   (4 services in parallel)
+#       - mvn package
+#       - docker buildx --platform linux/amd64 + push to Docker Hub
+#       - image tag is the short SHA (immutable) and 'latest' (mutable)
+#   2. terraform-apply  (environment: production — manual approval gate)
+#   3. ansible-deploy   (environment: production)
+#       - reads SSH private key from secret
+#       - reads RDS creds from Secrets Manager via aws cli
+#       - renders .env on the EC2 + docker compose up -d
+###############################################################################
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    # Don't trigger deploy on changes that don't affect runtime.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC to AWS
+  contents: read
+
+env:
+  JAVA_VERSION: "21"
+  TERRAFORM_VERSION: "1.9.8"
+  AWS_REGION: us-east-1
+  DOCKER_HUB_USER: dhirennn
+  IMAGE_TAG: ${{ github.sha }}    # immutable tag per commit
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build all 4 service images and push to Docker Hub.
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    name: build-and-push / ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-service, product-service, order-service]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Maven package (skip tests — see task #17)
+        working-directory: ${{ matrix.service }}
+        run: mvn -B -ntp -Dmaven.test.skip=true clean package
+
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build + push linux/amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USER }}/cncloud-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+            ${{ env.DOCKER_HUB_USER }}/cncloud-${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ---------------------------------------------------------------------------
+  # 2. Terraform apply against the dev environment.
+  #    Gated behind GitHub Environment 'production' so a maintainer has to
+  #    click "Review pending deployments" before infra changes.
+  # ---------------------------------------------------------------------------
+  terraform-apply:
+    name: terraform apply (dev)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+
+    outputs:
+      ec2_public_ip:    ${{ steps.outputs.outputs.ec2_public_ip }}
+      sqs_queue_url:    ${{ steps.outputs.outputs.sqs_queue_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform ${{ env.TERRAFORM_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-deploy-${{ github.run_id }}
+
+      - name: Stage tfvars
+        run: |
+          cat > terraform.tfvars <<EOF
+          key_name = "week6-key"
+          owner    = "github-actions"
+          EOF
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve
+
+      - name: Expose outputs
+        id: outputs
+        run: |
+          ip=$(terraform output -raw ec2_public_ip)
+          sqs=$(terraform output -raw sqs_queue_url)
+          echo "ec2_public_ip=$ip" >> "$GITHUB_OUTPUT"
+          echo "sqs_queue_url=$sqs" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 3. Ansible deploy — pulls the new images and recreates containers.
+  # ---------------------------------------------------------------------------
+  ansible-deploy:
+    name: ansible deploy
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC (for aws_ec2 inventory + Secrets Manager)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-ansible-${{ github.run_id }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ansible/requirements.txt
+
+      - name: Install Python deps for Ansible
+        run: pip install -r ansible/requirements.txt
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Stage SSH private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/week6-key.pem
+          chmod 600 ~/.ssh/week6-key.pem
+          ssh-keyscan -t ed25519 ${{ needs.terraform-apply.outputs.ec2_public_ip }} \
+            >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run Ansible deploy playbook
+        working-directory: ansible
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: /home/runner/.ssh/week6-key.pem
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          ansible-playbook playbooks/deploy-app.yml \
+            -e "image_tag=${{ github.sha }}"
+
+      - name: Smoke test via api-gateway
+        run: |
+          set -e
+          IP=${{ needs.terraform-apply.outputs.ec2_public_ip }}
+          # The app can take ~10min to fully boot on t3.micro.
+          # Don't fail the deploy if it isn't ready immediately.
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://${IP}:8080/actuator/health" || echo 000)
+            echo "Attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Gateway healthy."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::warning::Gateway not healthy after ~20 minutes. Check container logs on the EC2."

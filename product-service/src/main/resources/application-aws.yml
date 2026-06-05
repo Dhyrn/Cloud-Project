@@ -10,6 +10,12 @@
 ###############################################################################
 
 spring:
+  # Lazy init: Spring doesn't create beans until first use. Cuts startup
+  # time on t3.micro from ~11min to <1min by deferring JPA/Hibernate
+  # introspection. Cost: first HTTP request is ~500ms slower.
+  main:
+    lazy-initialization: true
+
   # ---- Persistence: RDS Postgres, schema 'product_svc' ------------------- #
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:appdb}
@@ -18,8 +24,10 @@ spring:
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 20000
+      minimum-idle: 0                       # don't pre-warm idle connections
+      connection-timeout: 30000
+      initialization-fail-timeout: -1       # don't fail startup if DB is slow
+      validation-timeout: 5000
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect

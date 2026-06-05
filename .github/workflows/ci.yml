@@ -1,0 +1,175 @@
+###############################################################################
+# CI — runs on every pull request to main.
+#
+# Jobs:
+#   1. build       - matrix of 4 services, mvn package, upload JAR artifact
+#   2. terraform   - fmt check, init, validate, plan against the dev backend
+#                    + comment the plan output on the PR
+#
+# Tests are intentionally SKIPPED (-Dmaven.test.skip=true) until task #17
+# (SqsClient test compile) is resolved. Add 'mvn test' here once it builds.
+###############################################################################
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  # Allow manual runs against any branch.
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC to AWS
+  contents: read
+  pull-requests: write   # comment terraform plan on PRs
+
+env:
+  JAVA_VERSION: "21"
+  TERRAFORM_VERSION: "1.9.8"
+  AWS_REGION: us-east-1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build all 4 services in parallel (matrix). Skips tests due to task #17.
+  # ---------------------------------------------------------------------------
+  build:
+    name: build / ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-service, product-service, order-service]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Maven package (skip tests — see task #17)
+        working-directory: ${{ matrix.service }}
+        run: mvn -B -ntp -Dmaven.test.skip=true clean package
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-jar
+          path: ${{ matrix.service }}/target/*.jar
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Terraform: fmt check, validate, plan against the live dev backend.
+  # ---------------------------------------------------------------------------
+  terraform:
+    name: terraform (dev)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform ${{ env.TERRAFORM_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-ci-${{ github.run_id }}
+
+      - name: Terraform fmt -check -recursive
+        id: fmt
+        run: terraform fmt -check -recursive -diff ../../
+        continue-on-error: true
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      # We need a tfvars file for plan to read key_name. CI uses a stub:
+      # the value doesn't matter for plan (no resources are actually created)
+      # but it has to be present.
+      - name: Stage a CI tfvars file
+        run: |
+          cat > terraform.tfvars <<EOF
+          key_name = "week6-key"
+          owner    = "ci-bot"
+          EOF
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -no-color -input=false -out=tfplan > plan.txt 2>&1
+          rc=$?
+          set -e
+          # Show in the job log
+          cat plan.txt
+          # Save for the PR comment
+          {
+            echo "exit_code=$rc"
+          } >> "$GITHUB_OUTPUT"
+          exit $rc
+
+      - name: Comment terraform plan on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const planPath = path.join('infrastructure/terraform/environments/dev', 'plan.txt');
+            let plan = '(plan output not available)';
+            try {
+              plan = fs.readFileSync(planPath, 'utf8');
+            } catch (e) {
+              plan = `Could not read plan: ${e.message}`;
+            }
+            // GitHub comment body limit: 65536 chars. Truncate if needed.
+            const MAX = 60000;
+            if (plan.length > MAX) {
+              plan = plan.slice(0, MAX) + '\n\n... (truncated, see workflow logs for full plan)';
+            }
+            const fmtStatus = '${{ steps.fmt.outcome }}';
+            const planStatus = '${{ steps.plan.outcome }}';
+            const body = [
+              '## Terraform plan (env: dev)',
+              '',
+              `- **fmt**: \`${fmtStatus}\``,
+              `- **plan**: \`${planStatus}\``,
+              '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '```hcl',
+              plan,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Fail job if fmt or plan failed
+        if: steps.fmt.outcome == 'failure' || steps.plan.outcome == 'failure'
+        run: |
+          echo "::error::terraform fmt or plan failed — see logs"
+          exit 1

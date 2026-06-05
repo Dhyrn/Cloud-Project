@@ -10,6 +10,10 @@ spring:
   application:
     name: user-service
 
+  # Lazy init — see comment in product-service/application-aws.yml.
+  main:
+    lazy-initialization: true
+
   # ---- Persistence: RDS Postgres, schema 'user_svc' ---------------------- #
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:appdb}
@@ -18,8 +22,10 @@ spring:
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 20000
+      minimum-idle: 0
+      connection-timeout: 30000
+      initialization-fail-timeout: -1
+      validation-timeout: 5000
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
