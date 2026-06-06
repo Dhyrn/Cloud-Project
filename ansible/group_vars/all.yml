@@ -1,9 +1,0 @@
----
-###############################################################################
-# DEPRECATED — this file is intentionally empty.
-#
-# Ansible discovers group_vars/ ADJACENT to the inventory file. Our inventory
-# lives in ansible/inventory/aws_ec2.yml, so the real group_vars are at
-# ansible/inventory/group_vars/all.yml. This file stays only because the
-# ansible/group_vars/ directory was created earlier by mistake.
-###############################################################################

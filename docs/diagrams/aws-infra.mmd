@@ -1,0 +1,58 @@
+%%
+%% docs/diagrams/aws-infra.mmd
+%% Rendered as an image: `mmdc -i aws-infra.mmd -o aws-infra.png -t dark`
+%% Or live: https://mermaid.live → paste this whole file.
+%%
+flowchart TB
+    subgraph Internet
+        client[Client / curl / browser]
+    end
+
+    subgraph AWS [AWS account 969831127354 · us-east-1]
+        direction TB
+
+        subgraph VPC [VPC 10.0.0.0/16]
+            direction TB
+
+            IGW[Internet Gateway]
+
+            subgraph PublicSubnets [Public subnets · 10.0.1.0/24, 10.0.2.0/24]
+                EC2[EC2 t3.small · cncloud-dev-app-host<br/>web-sg + app-sg + IAM instance profile<br/><br/>docker-compose:<br/>· api-gateway :8080<br/>· user-service :8081<br/>· product-service :8082<br/>· order-service :8083]
+            end
+
+            subgraph PrivateSubnets [Private subnets · 10.0.10.0/24, 10.0.20.0/24]
+                RDS[(RDS Postgres 17<br/>db.t3.micro · db-sg<br/>schema-per-service)]
+            end
+
+            EC2 -- 5432 from app-sg --> RDS
+        end
+
+        SQS[SQS Standard<br/>cncloud-dev-product-events]
+        DLQ[SQS DLQ<br/>cncloud-dev-product-events-dlq]
+        SM[Secrets Manager<br/>cncloud-dev-db-credentials]
+        IAM[IAM Role<br/>cncloud-dev-ec2-role]
+
+        EC2 -. assumes .-> IAM
+        IAM -. sqs:Send/Receive/Delete .-> SQS
+        IAM -. secretsmanager:GetSecretValue .-> SM
+
+        EC2 -- publish --> SQS
+        EC2 -- consume --> SQS
+        SQS -. failures .-> DLQ
+
+        S3[(S3 Terraform state<br/>cncloud-tf-state-...)]
+        DDB[(DynamoDB locks<br/>cncloud-tf-locks)]
+        SNS[SNS Billing alerts<br/>+ 2 CloudWatch alarms]
+    end
+
+    client -- :80 / :8080 --> IGW
+    IGW -- public route --> EC2
+
+    style EC2 fill:#3a3,stroke:#3a3
+    style RDS fill:#33a,stroke:#33a,color:#fff
+    style SQS fill:#a63,stroke:#a63
+    style DLQ fill:#a33,stroke:#a33
+    style SM fill:#5a5,stroke:#5a5
+    style IAM fill:#777,stroke:#777
+    style S3 fill:#555,stroke:#555
+    style DDB fill:#555,stroke:#555

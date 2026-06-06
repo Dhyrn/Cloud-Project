@@ -58,6 +58,12 @@ override.tf.json
 ansible/inventory/*.local
 ansible/vault_password*
 
+# Python venv (ansible local runtime)
+.venv/
+venv/
+__pycache__/
+*.pyc
+
 # AWS / Secrets
 *.pem
 *.ppk

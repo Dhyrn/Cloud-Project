@@ -1,0 +1,38 @@
+%%
+%% docs/diagrams/deploy-pipeline.mmd
+%% End-to-end CI/CD on push to main.
+%%
+sequenceDiagram
+    autonumber
+    actor dev as Developer
+    participant gh as GitHub repo
+    participant gha as GitHub Actions
+    participant aws as AWS (us-east-1)
+    participant ec2 as EC2 cncloud-dev-app-host
+    participant rds as RDS Postgres
+
+    dev->>gh: git push origin main
+
+    Note over gha: deploy.yml triggers
+    par 4 services in parallel (matrix)
+        gha->>gha: mvn clean package
+        gha->>gha: docker buildx --platform linux/amd64
+        gha->>gha: push to Docker Hub<br/>tags: <sha> + latest
+    end
+
+    Note over gha: terraform-apply job (environment: production)
+    gha-->>dev: ⏸ "Review pending deployments"
+    dev->>gh: Approve production
+    gha->>aws: AssumeRoleWithWebIdentity (OIDC)
+    aws-->>gha: short-lived STS session
+    gha->>aws: terraform apply
+
+    Note over gha: ansible-deploy job
+    gha->>aws: aws secretsmanager get-secret-value
+    aws-->>gha: RDS credentials (no_log)
+    gha->>ec2: scp docker-compose.aws.yml + .env (0600)
+    gha->>ec2: docker compose pull + up -d --force-recreate
+    ec2->>ec2: Spring Boot starts (lazy-init)
+    ec2->>rds: JDBC connect (via secret)
+    gha->>ec2: curl /actuator/health (retry until 200)
+    gha-->>dev: ✅ Green

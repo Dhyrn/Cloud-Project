@@ -42,16 +42,23 @@ For the full system diagram + naming conventions + open decisions, see
 
 ## Repository layout
 
+> Note on layout: the project brief suggests a `services/` directory
+> containing each microservice. We keep the four services at the **repo
+> root** because that's how the Lusófona course template ships them. It
+> makes the diff against the template clean and is otherwise equivalent.
+
 ```
 microservices-project/
 ├── README.md                     # this file
+├── Makefile                      # package / images / push / deploy / tf-*
 ├── docs/                         # design docs + operating manuals
 │   ├── architecture.md
 │   ├── setup.md
 │   ├── deployment.md
 │   ├── security.md
 │   ├── limitations.md
-│   └── reuse-map.md              # audit of the per-week labs
+│   ├── reuse-map.md              # audit of the per-week labs
+│   └── diagrams/                 # Mermaid sources (.mmd)
 ├── api-gateway/                  # Spring Cloud Gateway, :8080
 ├── user-service/                 # :8081
 ├── product-service/              # :8082, SQS publisher
