@@ -5,6 +5,13 @@
 > Actions. Forked from the [Lusófona course template](https://github.com/CLOUD-INFORMATION-SYSTEMS-LUSOFONA/microservices-project)
 > and extended into a full cloud-engineering stack.
 
+**Authors**
+
+| Name | Student number |
+|---|---|
+| Amir Ajij | a22304529 |
+| Dhiren Lalitcumar | a22303499 |
+
 ## What is this
 
 A small e-commerce-ish backend (catalog + orders + users) that exists primarily
